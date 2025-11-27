@@ -32,7 +32,7 @@ struct Args {
     wifi_packet_size: u16,
 
     // (min) Size of each fec block
-    #[arg(short = 'B', long, default_value_t = 10_000)]
+    #[arg(short = 'B', long, default_value_t = 9_600)]
     block_size: u16,
 
     // Number of redundant packages send per block
