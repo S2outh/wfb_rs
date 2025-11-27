@@ -20,12 +20,12 @@ When built with FEC support, both transmitter and receiver will automatically us
 - **Transmitter**: If enabled, it encodes each UDP packet into multiple FEC packets (default: 15 packets per block). Otherwise it adds radiotap and wifi headers and forwards tthe packets as they are.
 - **Receiver**: Automatically detects if packets are FEC packets and attempts to decode them back to the original data. Otherwise raw udp traffic is forwarded
 
-You can disable FEC at runtime using `./wfb_rs_tx --fec-enabled false ...`
+You can disable FEC at runtime using `./wfb_rs_tx --fec-disabled ...`
 
 ## Cross compiling for the raspi:
 
 `cross build --features=receiver --release`
 
-If you are strongly limited in storage space, you can optimize via upx, this will save about 2/3
+If you are strongly limited in storage space, you can optimize via upx, this will save about 2/3 of binary size
 
 `upx --best --lzma target/aarch64-unknown-linux-gnu/debug/tx_cli`
