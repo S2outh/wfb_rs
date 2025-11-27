@@ -89,6 +89,17 @@ impl Transmitter {
             }
         });
 
+        let (packet_s, packet_r) = channel();
+
+        // start sendtask
+        thread::spawn(move || {
+            loop {
+                let udp_packet: Vec<u8> = packet_r.recv().expect("packet sender closed");
+                let sent = self.send(&udp_packet);
+                sent_bytes_s.send(sent as u32).unwrap();
+            }
+        });
+
         loop {
             let mut udp_recv_buffer = vec![0u8; buffer_r];
             let poll_result = udp_socket.recv(&mut udp_recv_buffer);
@@ -111,13 +122,11 @@ impl Transmitter {
                         eprintln!("Input packet seems too large");
                     }
                     
-                    let udp_packet = &udp_recv_buffer[..received];
+                    let udp_packet = udp_recv_buffer[..received].to_vec();
 
                     received_bytes_s.send(received as u32)?;
 
-                    let sent = self.send(udp_packet);
-
-                    sent_bytes_s.send(sent as u32).unwrap();
+                    packet_s.send(udp_packet).expect("packet receiver closed");
                 }
             }
         }
