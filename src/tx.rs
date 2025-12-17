@@ -1,11 +1,6 @@
 mod tx_hardware_interface;
 mod tx_fec;
 
-use std::net::UdpSocket;
-use std::sync::mpsc::channel;
-use std::time::Duration;
-use std::{io, thread};
-
 use super::common::{hw_headers, magic_header, bandwidth::Bandwidth};
 
 use tx_hardware_interface::TXHwInt;
@@ -66,71 +61,6 @@ impl Transmitter {
         })
     }
 
-    pub fn run(mut self, source_port: u16, buffer_r: usize, log_interval: Duration) -> Result<(), Box<dyn std::error::Error>> {
-
-        let udp_socket = UdpSocket::bind(format!("0.0.0.0:{}", source_port))?;
-        
-        let (sent_bytes_s, sent_bytes_r) = channel();
-        let (received_bytes_s, received_bytes_r) = channel();
-
-        // start logtask
-        thread::spawn(move || {
-            loop {
-                let (sent_packets, sent_bytes): (u32, u32) = sent_bytes_r.try_iter().fold((0, 0), |(count, sum), v| (count + 1, sum + v));
-                let (received_packets, received_bytes): (u32, u32) = received_bytes_r.try_iter().fold((0, 0), |(count, sum), v| (count + 1, sum + v));
-                println!(
-                    "Packets R->T {}->{},\tBytes {}->{}",
-                    received_packets,
-                    sent_packets,
-                    received_bytes,
-                    sent_bytes,
-                );
-                thread::sleep(log_interval);
-            }
-        });
-
-        let (packet_s, packet_r) = channel();
-
-        // start sendtask
-        thread::spawn(move || {
-            loop {
-                let udp_packet: Vec<u8> = packet_r.recv().expect("packet sender closed");
-                let sent = self.send(&udp_packet);
-                sent_bytes_s.send(sent as u32).unwrap();
-            }
-        });
-
-        loop {
-            let mut udp_recv_buffer = vec![0u8; buffer_r];
-            let poll_result = udp_socket.recv(&mut udp_recv_buffer);
-
-            match poll_result {
-                Err(err) => match err.kind() {
-                    io::ErrorKind::TimedOut => continue,
-                    err => {
-                        eprintln!("Error polling udp input: {}", err);
-                        continue;
-                    },
-                },
-                Ok(received) => {
-                    if received == 0 {
-                        //Empty packet
-                        eprintln!("Empty packet");
-                        continue;
-                    }
-                    if received == buffer_r {
-                        eprintln!("Input packet seems too large");
-                    }
-                    
-                    let udp_packet = udp_recv_buffer[..received].to_vec();
-
-                    received_bytes_s.send(received as u32)?;
-
-                    packet_s.send(udp_packet).expect("packet receiver closed");
-                }
-            }
-        }
-    }
     pub fn send(&mut self, packet: &[u8]) -> u32 {
         let block = if let Some(fec) = self.fec.as_mut() {
             if let Some(block) = fec.process_packet_fec(packet) {

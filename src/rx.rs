@@ -1,11 +1,6 @@
 mod rx_hardware_interface;
 mod rx_fec;
 
-use std::net::UdpSocket;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::time::Duration;
-
 use rx_hardware_interface::RXHwInt;
 use rx_fec::RXFec;
 use crate::common::magic_header::MagicHeader;
@@ -40,53 +35,6 @@ impl Receiver {
             fec,
             magic_header,
         })
-    }
-
-    pub fn run(mut self,
-        client_address: String,
-        client_port: u16,
-        log_interval: Duration)
-        -> Result<(), Box<dyn std::error::Error>> {
-
-        let udp_socket = UdpSocket::bind("0.0.0.0:0")?; // Bind to any available port
-        
-        let compound_output_address = format!("{}:{}", client_address, client_port);
-        udp_socket.connect(&compound_output_address)?;
-        
-        let (sent_bytes_s, sent_bytes_r) = channel();
-        let (received_bytes_s, received_bytes_r) = channel();
-
-        // start logtask
-        thread::spawn(move || {
-            loop {
-                let (sent_packets, sent_bytes): (u32, u32) = sent_bytes_r.try_iter().fold((0, 0), |(count, sum), v| (count + 1, sum + v));
-                let (received_packets, received_bytes): (u32, u32) = received_bytes_r.try_iter().fold((0, 0), |(count, sum), v| (count + 1, sum + v));
-                println!(
-                    "Packets R->T {}->{},\tBytes {}->{}",
-                    received_packets,
-                    sent_packets,
-                    received_bytes,
-                    sent_bytes,
-                );
-                thread::sleep(log_interval);
-            }
-        });
-
-        loop {
-            let (decoded_data, received_bytes) = self.recv()?;
-            received_bytes_s.send(received_bytes)?;
-
-            for udp_pkg in decoded_data {
-                match udp_socket.send(&udp_pkg) {
-                    Err(e) => {
-                        eprintln!("Error forwarding packet: {}", e);
-                    }
-                    Ok(sent) => {
-                        sent_bytes_s.send(sent as u32)?;
-                    }
-                }
-            }
-        }
     }
 
     pub fn recv(&mut self) -> Result<(Vec<Vec<u8>>, u32), Box<dyn std::error::Error>> {
